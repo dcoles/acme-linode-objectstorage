@@ -40,7 +40,7 @@ with Read/Write permission to Object Storage.
     
     If this is the first time running the script, you will also need to include the
     `--agree-to-terms-of-service` flag to indicate agreement with the
-    [Let's Encrypt Terms of Service]("https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf").
+    [Let's Encrypt Terms of Service](https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf).
 
 
 Certificates are typically valid for 90-days. This script should be re-run approximately
