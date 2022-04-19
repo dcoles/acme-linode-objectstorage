@@ -148,7 +148,7 @@ def main():
         logging.info('Finalizing order')
         try:
             order.finalize(csr)
-            order.poll_until_not({'processing'})
+            order.poll_until_not({'processing', 'pending'})
         except requests.HTTPError as e:
             print(f'ERROR: Failed to finalize order: {e.response.text}', file=sys.stderr)
             return 1
