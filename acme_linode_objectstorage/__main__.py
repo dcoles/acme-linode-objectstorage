@@ -35,7 +35,7 @@ def main():
 
     args = parse_args()
 
-    if LINODE_TOKEN is None:
+    if not LINODE_TOKEN:
         print('ERROR: LINODE_TOKEN environment variable not set', file=sys.stderr)
         return 2
 
