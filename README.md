@@ -12,6 +12,16 @@ and [Requests](https://github.com/psf/requests).
 pip install cryptography requests
 ```
 
+## Installing
+
+The easiest way to install is using [`pip`](https://docs.python.org/3/installing/):
+
+```
+pip install --user git+https://github.com/dcoles/acme-linode-objectstorage.git
+```
+
+Alternatively clone this repository and run `python3 setup.py install --user`.
+
 ## Usage
 
 This assumes you have already [created an Object Storage Bucket](https://www.linode.com/docs/guides/enable-ssl-for-object-storage/#create-an-object-storage-bucket)
