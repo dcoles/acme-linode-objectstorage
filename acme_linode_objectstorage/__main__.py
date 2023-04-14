@@ -25,15 +25,21 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-k', '--account-key', required=True)
     parser.add_argument('-C', '--cluster', default='us-east-1')
+    parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument('--agree-to-terms-of-service', action='store_true')
     parser.add_argument('domain')
     return parser.parse_args()
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
-
     args = parse_args()
+
+    if args.verbose:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
+    logging.basicConfig(level=level)
 
     if not LINODE_TOKEN:
         print('ERROR: LINODE_TOKEN environment variable not set', file=sys.stderr)
