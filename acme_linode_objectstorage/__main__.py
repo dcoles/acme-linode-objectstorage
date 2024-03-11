@@ -132,7 +132,7 @@ def main():
                 # Respond to the challenge
                 try:
                     challenge.respond()
-                    challenge.poll_until_not({'processing'})
+                    challenge.poll_until_not({'pending', 'processing'})
                 except requests.HTTPError as e:
                     print(f'ERROR: Responding to challenge failed: {e.response.text}', file=sys.stderr)
                     return 1
