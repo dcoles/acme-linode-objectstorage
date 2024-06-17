@@ -46,8 +46,6 @@ with Read/Write permission to Object Storage.
     python3 -m acme_linode_objectstorage -k account_key.pem my.bucket.domain
     ```
 
-    The Object Storage cluster can be specified with the `--cluster` flag (default: `us-east-1`).
-    
     If this is the first time running the script, you will also need to include the
     `--agree-to-terms-of-service` flag to indicate agreement with the
     [Let's Encrypt Terms of Service](https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf).

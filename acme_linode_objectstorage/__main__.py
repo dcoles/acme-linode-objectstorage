@@ -24,7 +24,6 @@ KEY_SIZE = 2048
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-k', '--account-key', required=True)
-    parser.add_argument('-C', '--cluster', default='us-east-1')
     parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument('--agree-to-terms-of-service', action='store_true')
     parser.add_argument('domain')
@@ -45,18 +44,20 @@ def main():
         print('ERROR: LINODE_TOKEN environment variable not set', file=sys.stderr)
         return 2
 
+    domain = args.domain
+
     with open(args.account_key, 'rb') as f:
         account_key = serialization.load_pem_private_key(f.read(), None)
 
     logging.info('Generating %d-bit RSA private key', KEY_SIZE)
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=KEY_SIZE)
 
-    logging.info('Creating CSR for %s', args.domain)
+    logging.info('Creating CSR for %s', domain)
     csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, args.domain),
+        x509.NameAttribute(NameOID.COMMON_NAME, domain),
     ])).add_extension(
         x509.SubjectAlternativeName([
-            x509.DNSName(args.domain),
+            x509.DNSName(domain),
         ]),
         critical=False
     ).sign(private_key, hashes.SHA256())
@@ -72,7 +73,7 @@ def main():
         acme.http.headers['User-Agent'] = USER_AGENT
 
         buckets = [bucket for bucket in object_storage.buckets()
-                   if bucket['cluster'] == args.cluster and bucket['label'] == args.domain]
+                   if bucket['label'] == domain]
         if not buckets:
             print('ERROR: No matching bucket found', file=sys.stderr)
             return 1
@@ -86,10 +87,9 @@ def main():
 
         logging.debug('account: %s', account)
 
-        logging.info('Creating new order for %s', args.domain)
-        domains = [args.domain]
+        logging.info('Creating new order for %s', domain)
         try:
-            order = acme.new_order(domains)
+            order = acme.new_order([domain])
         except requests.HTTPError as e:
             print(f'ERROR: Failed to create order: {e.response.text}', file=sys.stderr)
             return 1
@@ -106,25 +106,28 @@ def main():
                 return 1
 
             # Create http-01 challenge resource
-            try:
-                obj_name = f'/.well-known/acme-challenge/{quote(challenge["token"])}'
-                data = f'{challenge["token"]}.{account.key_thumbprint}'
 
-                put_url = object_storage.create_object_url(
-                    args.cluster, args.domain, obj_name, 'PUT', 'text/plain', expires_in=360)
+            for bucket in buckets:
+                try:
+                    obj_name = f'/.well-known/acme-challenge/{quote(challenge["token"])}'
+                    data = f'{challenge["token"]}.{account.key_thumbprint}'
 
-                requests.put(put_url, data=data, headers={'Content-Type': 'text/plain'}).raise_for_status()
-            except requests.HTTPError as e:
-                print(f'ERROR: Failed to create challenge resource: {e.response.text}', file=sys.stderr)
-                return 1
+                    put_url = object_storage.create_object_url(
+                        bucket['cluster'], bucket['label'], obj_name, 'PUT', 'text/plain', expires_in=360)
+
+                    requests.put(put_url, data=data, headers={'Content-Type': 'text/plain'}).raise_for_status()
+                except requests.HTTPError as e:
+                    print(f'ERROR: Failed to create challenge resource: {e.response.text}', file=sys.stderr)
+                    return 1
 
             try:
                 # Make challenge resource publicly readable
-                object_storage.update_object_acl(args.cluster, args.domain, obj_name, 'public-read')
+                for bucket in buckets:
+                    object_storage.update_object_acl(bucket['cluster'], bucket['label'], obj_name, 'public-read')
 
                 # Check we can read the challenge resource
                 try:
-                    requests.head(urlunsplit(('http', args.domain, obj_name, '', ''))).raise_for_status()
+                    requests.head(urlunsplit(('http', domain, obj_name, '', ''))).raise_for_status()
                 except requests.HTTPError as e:
                     print(f'ERROR: Failed to read challenge: {e}', file=sys.stderr)
                     return 1
@@ -143,13 +146,14 @@ def main():
 
             finally:
                 # Cleanup challenge resource
-                try:
-                    delete_url = object_storage.create_object_url(
-                        args.cluster, args.domain, obj_name, 'DELETE', expires_in=360)
+                for bucket in buckets:
+                    try:
+                        delete_url = object_storage.create_object_url(
+                            bucket['cluster'], bucket['label'], obj_name, 'DELETE', expires_in=360)
 
-                    requests.delete(delete_url).raise_for_status()
-                except requests.HTTPError as e:
-                    logging.warning('Failed to cleanup challenge resource: %s', e)
+                        requests.delete(delete_url).raise_for_status()
+                    except requests.HTTPError as e:
+                        logging.warning('Failed to cleanup challenge resource: %s', e)
 
         logging.info('Finalizing order')
         try:
@@ -171,22 +175,24 @@ def main():
             return 1
 
         logging.info('Updating certs')
-        try:
-            object_storage.delete_ssl(args.cluster, args.domain)
-        except requests.HTTPError as e:
-            print(f'ERROR: Failed to delete old certificate: {e.response.text}', file=sys.stderr)
-            return 1
+        for bucket in buckets:
+            try:
+                object_storage.delete_ssl(bucket['cluster'], bucket['label'])
+            except requests.HTTPError as e:
+                print(f'ERROR: Failed to delete old certificate: {e.response.text}', file=sys.stderr)
+                return 1
 
         private_key_pem = private_key.private_bytes(
             serialization.Encoding.PEM,
             serialization.PrivateFormat.TraditionalOpenSSL,
             serialization.NoEncryption()).decode('ascii')
 
-        try:
-            object_storage.create_ssl(args.cluster, args.domain, certificate, private_key_pem)
-        except requests.HTTPError as e:
-            print(f'ERROR: Failed to create certificate: {e.response.text}', file=sys.stderr)
-            return 1
+        for bucket in buckets:
+            try:
+                object_storage.create_ssl(bucket['cluster'], bucket['label'], certificate, private_key_pem)
+            except requests.HTTPError as e:
+                print(f'ERROR: Failed to create certificate: {e.response.text}', file=sys.stderr)
+                return 1
 
 
 if __name__ == '__main__':
